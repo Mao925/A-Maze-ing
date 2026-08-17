@@ -55,16 +55,16 @@ def test_constructor_rejects_non_positive_dimensions(
     height: int,
 ) -> None:
     """A maze must contain at least one cell in both dimensions."""
-    with pytest.raises(ValueError, match="1以上"):
+    with pytest.raises(ValueError, match="at least 1"):
         MazeGenerator(width, height)
 
 
 def test_wall_mask_rejects_out_of_bounds_coordinates() -> None:
     """The public cell accessor reports invalid coordinates explicitly."""
     maze = MazeGenerator(4, 3)
-    with pytest.raises(ValueError, match="範囲外"):
+    with pytest.raises(ValueError, match="outside"):
         maze.wall_mask((4, 2))
-    with pytest.raises(ValueError, match="範囲外"):
+    with pytest.raises(ValueError, match="outside"):
         maze.wall_mask((-1, 0))
 
 
@@ -121,9 +121,9 @@ def test_shortest_path_rejects_invalid_endpoints() -> None:
     maze = MazeGenerator(20, 15, seed=3)
     maze.generate(True)
     blocked = next(iter(maze.blocked_cells))
-    with pytest.raises(ValueError, match="範囲外"):
+    with pytest.raises(ValueError, match="outside"):
         maze.shortest_path((-1, 0), (0, 0))
-    with pytest.raises(ValueError, match="閉鎖セル"):
+    with pytest.raises(ValueError, match="closed 42"):
         maze.shortest_path(blocked, (0, 0))
 
 
@@ -138,14 +138,14 @@ def test_protected_cells_never_overlap_the_42_pattern() -> None:
 def test_generate_rejects_out_of_bounds_protected_cell() -> None:
     """Invalid protected coordinates fail before generation begins."""
     maze = MazeGenerator(5, 5, seed=1)
-    with pytest.raises(ValueError, match="保護対象.*範囲外"):
+    with pytest.raises(ValueError, match="Protected point.*outside"):
         maze.generate(True, frozenset({(5, 0)}))
 
 
 def test_small_maze_warns_when_42_cannot_be_placed() -> None:
     """Small valid mazes are generated, with the required visible warning."""
     maze = MazeGenerator(3, 3, seed=4)
-    with pytest.warns(RuntimeWarning, match="42 パターン"):
+    with pytest.warns(RuntimeWarning, match="42 pattern"):
         maze.generate(True)
     assert not maze.blocked_cells
 
@@ -153,5 +153,5 @@ def test_small_maze_warns_when_42_cannot_be_placed() -> None:
 def test_impossible_playable_maze_raises_generation_error() -> None:
     """A one-cell board cannot provide the two required independent loops."""
     maze = MazeGenerator(1, 1, seed=0)
-    with pytest.raises(MazeGenerationError, match="独立ループ"):
+    with pytest.raises(MazeGenerationError, match="independent loops"):
         maze.generate(False)

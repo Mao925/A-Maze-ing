@@ -3,4 +3,12 @@ __pycache__/
 .mypy_cache/
 .venv/
 dist/
-
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+maze.txt

@@ -65,7 +65,7 @@ class MazeGenerator:
         seed: int | None = None,
     ) -> None:
         if width <= 0 or height <= 0:
-            raise ValueError("width と height は1以上でなければなりません")
+            raise ValueError("width and height must be at least 1")
 
         self.width = width
         self.height = height
@@ -88,7 +88,7 @@ class MazeGenerator:
             point for point in protected_cells if not self._in_bounds(point)
         )
         if invalid:
-            raise ValueError(f"保護対象の座標が迷路の範囲外です: {invalid}")
+            raise ValueError(f"Protected point is outside the maze: {invalid}")
 
         random_seed = self._seed
         if random_seed is None:
@@ -108,17 +108,17 @@ class MazeGenerator:
             if not last_errors:
                 if not self._blocked_cells:
                     warnings.warn(
-                        "迷路が小さい、または保護座標と重なるため "
-                        "42 パターンを配置できませんでした",
+                        "The maze is too small, or protected points leave no "
+                        "space for the 42 pattern",
                         RuntimeWarning,
                         stacklevel=2,
                     )
                 return
 
-        details = "; ".join(last_errors) or "原因を特定できませんでした"
+        details = "; ".join(last_errors) or "unknown reason"
         raise MazeGenerationError(
-            f"{MAX_GENERATION_ATTEMPTS} 回試行しても有効な迷路を"
-            f"生成できませんでした: {details}"
+            f"Could not generate a valid maze after {MAX_GENERATION_ATTEMPTS} "
+            f"attempts: {details}"
         )
 
     def shortest_path(self, start: Point, goal: Point) -> list[str]:
@@ -129,9 +129,9 @@ class MazeGenerator:
         """
         for name, point in (("start", start), ("goal", goal)):
             if not self._in_bounds(point):
-                raise ValueError(f"{name} が迷路の範囲外です: {point}")
+                raise ValueError(f"{name} is outside the maze: {point}")
             if point in self._blocked_cells:
-                raise ValueError(f"{name} は 42 の閉鎖セルです: {point}")
+                raise ValueError(f"{name} is a closed 42 cell: {point}")
 
         parents: dict[Point, tuple[Point, str]] = {}
         seen = {start}
@@ -146,7 +146,7 @@ class MazeGenerator:
                 queue.append(neighbour)
 
         if goal not in seen:
-            raise ValueError(f"{start} から {goal} への経路がありません")
+            raise ValueError(f"There is no path from {start} to {goal}")
 
         path: list[str] = []
         current = goal
@@ -159,7 +159,7 @@ class MazeGenerator:
     def wall_mask(self, point: Point) -> int:
         """指定セルの壁ビット（0〜15）を返す。"""
         if not self._in_bounds(point):
-            raise ValueError(f"座標が迷路の範囲外です: {point}")
+            raise ValueError(f"Point is outside the maze: {point}")
 
         x, y = point
         return self._grid[y][x]
@@ -193,7 +193,7 @@ class MazeGenerator:
         x, y = point
         neighbour = self._neighbour(point, direction)
         if not self._in_bounds(neighbour):
-            raise ValueError("隣接セルが迷路の範囲外です")
+            raise ValueError("The neighbouring cell is outside the maze")
 
         nx, ny = neighbour
         self._grid[y][x] &= ALL_WALLS ^ int(direction)
@@ -204,7 +204,7 @@ class MazeGenerator:
         x, y = point
         neighbour = self._neighbour(point, direction)
         if not self._in_bounds(neighbour):
-            raise ValueError("隣接セルが迷路の範囲外です")
+            raise ValueError("The neighbouring cell is outside the maze")
 
         nx, ny = neighbour
         self._grid[y][x] |= int(direction)
@@ -285,7 +285,7 @@ class MazeGenerator:
 
         if visited != normal_cells:
             raise MazeGenerationError(
-                "42 パターン以外のセルを一つの迷路として連結できません"
+                "Cells outside the 42 pattern cannot be connected"
             )
 
     def _add_loops(self, rng: random.Random) -> None:
@@ -420,37 +420,37 @@ class MazeGenerator:
         if len(self._grid) != self.height or any(
             len(row) != self.width for row in self._grid
         ):
-            return ["壁グリッドの寸法が width/height と一致しません"]
+            return ["Wall grid dimensions do not match width and height"]
 
         for y, row in enumerate(self._grid):
             for x, mask in enumerate(row):
                 if not isinstance(mask, int) or not 0 <= mask <= ALL_WALLS:
-                    errors.append(f"セル {(x, y)} の壁値が不正です: {mask}")
+                    errors.append(f"Invalid wall value at {(x, y)}: {mask}")
 
         for point in protected_cells:
             if not self._in_bounds(point):
-                errors.append(f"保護対象の座標が範囲外です: {point}")
+                errors.append(f"Protected point is outside the maze: {point}")
             elif point in self._blocked_cells:
-                errors.append(f"保護対象の座標が 42 と重なっています: {point}")
+                errors.append(f"Protected point overlaps 42: {point}")
 
         for point in self._blocked_cells:
             if not self._in_bounds(point):
-                errors.append(f"42 の座標が範囲外です: {point}")
+                errors.append(f"42 point is outside the maze: {point}")
             elif self.wall_mask(point) != ALL_WALLS:
-                errors.append(f"42 のセルが完全閉鎖されていません: {point}")
+                errors.append(f"42 cell is not fully closed: {point}")
 
         for y in range(self.height):
             for x in range(self.width):
                 point = (x, y)
                 mask = self.wall_mask(point)
                 if y == 0 and not mask & int(Direction.N):
-                    errors.append(f"北外周が開いています: {point}")
+                    errors.append(f"North outer wall is open: {point}")
                 if x == self.width - 1 and not mask & int(Direction.E):
-                    errors.append(f"東外周が開いています: {point}")
+                    errors.append(f"East outer wall is open: {point}")
                 if y == self.height - 1 and not mask & int(Direction.S):
-                    errors.append(f"南外周が開いています: {point}")
+                    errors.append(f"South outer wall is open: {point}")
                 if x == 0 and not mask & int(Direction.W):
-                    errors.append(f"西外周が開いています: {point}")
+                    errors.append(f"West outer wall is open: {point}")
 
                 for direction in (Direction.E, Direction.S):
                     neighbour = self._neighbour(point, direction)
@@ -463,33 +463,33 @@ class MazeGenerator:
                     )
                     if closed_here != closed_there:
                         errors.append(
-                            f"共有壁が一致しません: {point} {direction.name}"
+                            f"Shared wall does not match: {point} {direction.name}"
                         )
 
         normal_cells = self._normal_cells()
         if not normal_cells:
-            errors.append("通路として使える通常セルがありません")
+            errors.append("There are no usable corridor cells")
         else:
             start = min(normal_cells)
             if self._reachable_cells(start) != normal_cells:
-                errors.append("42 以外のセルがすべて連結されていません")
+                errors.append("Cells outside 42 are not all connected")
 
         if self._has_open_3x3():
-            errors.append("完全開放された 3x3 領域があります")
+            errors.append("There is a fully open 3x3 area")
 
         loops = self._loop_count()
         if perfect and loops != 0:
-            errors.append(f"完全迷路に {loops} 個の独立ループがあります")
+            errors.append(f"The perfect maze has {loops} independent loop(s)")
         if not perfect:
             if loops < 2:
-                errors.append(f"独立ループが不足しています: {loops} < 2")
+                errors.append(f"Not enough independent loops: {loops} < 2")
             dead_ends = self._dead_end_count()
             if dead_ends > 2:
-                errors.append(f"行き止まりが多すぎます: {dead_ends} > 2")
+                errors.append(f"Too many dead ends: {dead_ends} > 2")
             unavailable = self._key_cells() - normal_cells
             if unavailable:
                 errors.append(
-                    "四隅または中央が通路ではありません: "
+                    "A corner or centre cell is not a corridor: "
                     f"{sorted(unavailable)}"
                 )
         return errors
