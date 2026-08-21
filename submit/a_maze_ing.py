@@ -183,20 +183,28 @@ def draw_maze(
     path_steps: list[str],
     show_path: bool,
     wall: str = "#",
+    wall_color: str = "",
 ) -> str:
     """公開APIだけを使って、端末用の ASCII 迷路を作る。"""
+    def paint(text: str) -> str:
+        """壁の文字を端末カラーで囲む。カラー未指定ならそのまま返す。"""
+        if not wall_color or not text.strip():
+            return text
+        return f"{wall_color}{text}\033[0m"
+
     marked = path_cells(config.entry, path_steps) if show_path else set()
     rows: list[str] = []
     for y in range(maze.height):
         # セル上側の横壁。各セルの北壁を3文字で描きます。
-        rows.append("+" + "+".join(
-            wall * 3 if maze.wall_mask((x, y)) & Direction.N else " " * 3
+        rows.append(paint("+") + paint("+").join(
+            paint(wall * 3)
+            if maze.wall_mask((x, y)) & Direction.N else " " * 3
             for x in range(maze.width)
-        ) + "+")
+        ) + paint("+"))
         middle = []
         for x in range(maze.width):
             point = (x, y)
-            left = wall if maze.wall_mask(point) & Direction.W else " "
+            left = paint(wall) if maze.wall_mask(point) & Direction.W else " "
             if point in maze.blocked_cells:
                 cell = "42 "
             elif point == config.entry:
@@ -209,14 +217,14 @@ def draw_maze(
                 cell = "   "
             middle.extend([left, cell])
         last_cell = (maze.width - 1, y)
-        right = wall if maze.wall_mask(last_cell) & Direction.E else " "
+        right = paint(wall) if maze.wall_mask(last_cell) & Direction.E else " "
         rows.append("".join(middle) + right)
-    rows.append("+" + "+".join(
-        wall * 3
+    rows.append(paint("+") + paint("+").join(
+        paint(wall * 3)
         if maze.wall_mask((x, maze.height - 1)) & Direction.S
         else " " * 3
         for x in range(maze.width)
-    ) + "+")
+    ) + paint("+"))
     return "\n".join(rows)
 
 
@@ -225,18 +233,27 @@ def interactive_display(
     config: MazeConfig,
     path_steps: list[str],
 ) -> None:
-    """端末上で r（再生成）、p（経路）、c（壁）、q（終了）を受け付ける。"""
-    show_path = True
+    """端末上で 1（再生成）、2（経路）、3（壁）、4（終了）を受け付ける。"""
+    show_path = False
     wall = "#"
+    wall_colors = ["", "\033[36m", "\033[33m"]
+    wall_color_index = 0
     generation_number = 0
     while True:
-        print(draw_maze(maze, config, path_steps, show_path, wall))
+        print(draw_maze(
+            maze,
+            config,
+            path_steps,
+            show_path,
+            wall,
+            wall_colors[wall_color_index],
+        ))
         command = input(
-            "[r] regenerate  [p] show/hide path  [c] change walls  [q] quit > "
-        ).strip().lower()
-        if command == "q":
+            "[1] regenerate  [2] show/hide path  [3] change walls  [4] quit > "
+        ).strip()
+        if command == "4":
             return
-        if command == "r":
+        if command == "1":
             generation_number += 1
             # SEEDを固定した場合も r のたびに別の盤面になるよう、番号を足す。
             if config.seed is None:
@@ -248,12 +265,12 @@ def interactive_display(
             maze.generate(config.perfect, protected)
             path_steps = write_maze(config.output_file, maze, config)
             print(f"New maze saved to: {config.output_file}")
-        elif command == "p":
+        elif command == "2":
             show_path = not show_path
-        elif command == "c":
-            wall = "*" if wall == "#" else "#"
+        elif command == "3":
+            wall_color_index = (wall_color_index + 1) % len(wall_colors)
         else:
-            print("Please enter r, p, c, or q.")
+            print("Please enter 1, 2, 3, or 4.")
 
 
 def run(config_path: Path, output: TextIO = sys.stdout) -> int:
