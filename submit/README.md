@@ -76,8 +76,8 @@ mask = maze.wall_mask((0, 0))
 
 | 担当 | 内容 |
 | --- | --- |
-| 担当者A | `MazeGenerator`、DFS/BFS、壁整合性、42、迷路の検証とテスト |
-| 担当者B | 設定パーサー、CLI、保存、ASCII表示、Makefile、配布設定、文書 |
+| mhashimo | `MazeGenerator`、DFS/BFS、壁整合性、42、迷路の検証とテスト |
+| yohsawa  | 設定パーサー、CLI、保存、ASCII表示、Makefile、配布設定、文書 |
 
 最初に座標を `(x, y)`、壁ビットを N=1/E=2/S=4/W=8 と合意しました。担当間の境界は
 `MazeGenerator` の公開APIに固定し、CLIが内部グリッドに依存しないようにしました。
