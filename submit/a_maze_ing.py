@@ -263,10 +263,11 @@ def run(config_path: Path, output: TextIO = sys.stdout) -> int:
     maze.generate(config.perfect, frozenset({config.entry, config.exit}))
     path_steps = write_maze(config.output_file, maze, config)
     print(f"Maze saved to: {config.output_file}", file=output)
-    print(draw_maze(maze, config, path_steps, show_path=True), file=output)
-    # CIやリダイレクト中には input() を呼ばず、1回表示して終了します。
     if output is sys.stdout and sys.stdin.isatty():
         interactive_display(maze, config, path_steps)
+    else:
+        # CIやリダイレクト中には input() を呼ばず、1回表示して終了します。
+        print(draw_maze(maze, config, path_steps, show_path=True), file=output)
     return 0
 
 
