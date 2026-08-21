@@ -38,7 +38,8 @@ def parse_config(path: Path) -> MazeConfig:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as error:
-        raise ConfigError(f"Cannot read config file: {path} ({error})") from error
+        message = f"Cannot read config file: {path} ({error})"
+        raise ConfigError(message) from error
 
     values: dict[str, str] = {}
     for line_number, raw_line in enumerate(lines, start=1):
@@ -54,12 +55,15 @@ def parse_config(path: Path) -> MazeConfig:
         if not value:
             raise ConfigError(f"Line {line_number}: {key} must not be empty")
         if key in values:
-            raise ConfigError(f"Line {line_number}: duplicate key: {key}")
+            raise ConfigError(
+                f"Line {line_number}: duplicate key: {key}"
+            )
         values[key] = value
 
     missing = REQUIRED_KEYS - values.keys()
     if missing:
-        raise ConfigError(f"Missing required key(s): {', '.join(sorted(missing))}")
+        missing_keys = ", ".join(sorted(missing))
+        raise ConfigError(f"Missing required key(s): {missing_keys}")
 
     width = parse_positive_int(values["WIDTH"], "WIDTH")
     height = parse_positive_int(values["HEIGHT"], "HEIGHT")
@@ -129,7 +133,9 @@ def check_point_in_bounds(
     """座標が迷路の中にあるか確認する。"""
     x, y = point
     if not 0 <= x < width or not 0 <= y < height:
-        raise ConfigError(f"{name}={x},{y} is outside the {width}x{height} maze")
+        raise ConfigError(
+            f"{name}={x},{y} is outside the {width}x{height} maze"
+        )
 
 
 def write_maze(
@@ -156,7 +162,8 @@ def write_maze(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8", newline="\n")
     except OSError as error:
-        raise ConfigError(f"Cannot write output file: {path} ({error})") from error
+        message = f"Cannot write output file: {path} ({error})"
+        raise ConfigError(message) from error
     return path_steps
 
 

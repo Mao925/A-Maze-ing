@@ -462,9 +462,11 @@ class MazeGenerator:
                         self._grid[ny][nx] & int(OPPOSITE[direction])
                     )
                     if closed_here != closed_there:
-                        errors.append(
-                            f"Shared wall does not match: {point} {direction.name}"
+                        message = (
+                            f"Shared wall does not match: {point} "
+                            f"{direction.name}"
                         )
+                        errors.append(message)
 
         normal_cells = self._normal_cells()
         if not normal_cells:

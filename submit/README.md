@@ -16,6 +16,16 @@ make install
 make run
 ```
 
+その他の Makefile ターゲットは次のとおりです。
+
+```bash
+make debug  # pdb で実行
+make test   # pytest を実行
+make lint   # flake8 と mypy を実行
+make build  # 配布用パッケージを build/ と dist/ に作成
+make clean  # キャッシュ、仮想環境、生成物を削除
+```
+
 または依存パッケージなしで、直接実行できます。
 
 ```bash
@@ -42,12 +52,21 @@ SEED=42
 
 `WIDTH` と `HEIGHT` は1以上の整数、`ENTRY` と `EXIT` は `x,y` 座標です。
 `PERFECT` は `true` または `false`、`SEED` は任意の整数です。同じシードと設定なら
-同じ迷路が得られます。
+同じ迷路が得られます。`SEED` を省略した場合はランダムな迷路になります。
+
+`OUTPUT_FILE` が相対パスの場合は、設定ファイルを基準に出力されます。
 
 ## Output format
 
 1セルを16進数1文字で表します。ビットが1なら壁は閉鎖です：北=1、東=2、南=4、西=8。
 迷路本体の後の空行に続けて、入口、出口、最短経路（`NESW` の連続文字列）を書きます。
+
+生成結果は付属の解析ツールでも確認できます。
+
+```bash
+make run
+python3 maze_analyzer.py maze.txt
+```
 
 ## Reusable generator
 
@@ -62,15 +81,17 @@ path = maze.shortest_path((0, 0), (19, 14))
 mask = maze.wall_mask((0, 0))
 ```
 
-`wall_mask((x, y))` は壁ビット、`blocked_cells` は `42` のために完全閉鎖された
+`wall_mask((x, y))` は壁ビット、`bl maze_analyzer.py   ocked_cells` は `42` のために完全閉鎖された
 セル集合を返します。CLI・表示側は、この公開API以外の内部状態を読みません。
 
 ## Algorithm
 
 まず反復版 DFS（再帰バックトラッカー）で全セルを一度ずつつなぐ完全迷路を作ります。
 これは「全セル連結・ループなし」を自然に満たし、シード付き乱数で再現できます。
-非完全モードでは、3×3の開放領域を作らないことを確認しながら壁を追加で開け、
+非完全モードでは、3×3の開放領域を作らないことを確認しながら壁を追加で取り除き、
 少なくとも2つの独立ループを作ります。最短経路の探索には BFS を使います。
+完全に閉じたセルを使った `42` パターンは、迷路が小さく配置できない場合を除き、
+通常の通路と分離して生成されます。
 
 ## Team and project management
 
