@@ -1,4 +1,33 @@
 #!/usr/bin/env python3
+"""a_maze_ing - maze output analyzer.
+
+Reads a maze output file and reports two things:
+
+* **Wall coherence** - every shared wall must be encoded the same way by both
+  neighbouring cells.
+* **Perfect vs. playable** - whether the maze reachable from the entry is a
+  *perfect* maze (a single path, i.e. no loops, as required with
+  ``PERFECT=True``) or a *playable* board (no dead-ends besides the ones
+  enclosed by the mandatory "42" pattern, plus several independent routes, as
+  required by default so the maze can be reused as a Pac-Man-like board).
+
+A malformed file produces a clear message and a non-zero exit code rather than
+an error trace, so the tool is safe to run on any input.
+
+Wall encoding (per the subject): one hexadecimal digit per cell, where a set
+bit means the wall is *closed* - bit 0 = North, 1 = East, 2 = South, 3 = West.
+After a blank line the footer holds the entry "x,y", the exit "x,y" and the
+shortest path.
+
+Usage::
+
+    python3 maze_analyzer.py <output_file> [--min-loops N] [--max-dead-ends N]
+
+For the playable (non-perfect) mode the two thresholds are quantifiable and
+adjustable: ``--min-loops`` (default 2) is the minimum number of independent
+routes, and ``--max-dead-ends`` (default 2) the number of real dead-ends
+tolerated -- run with ``--max-dead-ends 0`` to check the no-dead-end bonus.
+"""
 
 from __future__ import annotations
 
@@ -10,11 +39,11 @@ from enum import IntFlag
 from functools import cached_property
 from typing import Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
-Cell = Tuple[int, int]                 # 変更できない (行, 列) 座標
+Cell = Tuple[int, int]                 # an immutable (row, col) position
 
 
 class Direction(IntFlag):
-    """壁の方向。整数値はファイル内で使う壁ビットを表す。"""
+    """A wall side. The integer value is the bit used in the file encoding."""
 
     NORTH = 1
     EAST = 2
@@ -23,12 +52,12 @@ class Direction(IntFlag):
 
     @property
     def opposite(self) -> "Direction":
-        """隣接セル側から見た、同じ共有壁の反対方向を返す。"""
+        """The same wall seen from the neighbouring cell."""
         return _OPPOSITE[self]
 
     @property
     def step(self) -> Cell:
-        """この方向にある隣接セルへの (行, 列) の移動量を返す。"""
+        """The (row, col) offset to the neighbour on this side."""
         return _STEP[self]
 
 
@@ -55,15 +84,18 @@ HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 
 class MazeError(Exception):
-    """入力ファイルを迷路グリッドとして解析できない場合の例外。"""
+    """Raised when the input file cannot be parsed as a maze grid."""
 
 
+# --------------------------------------------------------------------------- #
+# Model
+# --------------------------------------------------------------------------- #
 class Maze:
-    """解析済みの迷路。壁グリッドと入口・出口のセルを保持する。
+    """A parsed maze: the wall grid plus the entry and exit cells.
 
-    グリッドはセルごとに1つの整数を持ち、ビットが1の方向を
-    *閉じた壁*として表す。接続性の分析は、隣接セル間の開いた通路を
-    辺とするグラフに対するビット演算だけで行える。
+    The grid stores one integer per cell whose set bits mark *closed* walls,
+    so the whole connectivity analysis is pure bit-twiddling over a graph
+    whose edges are the open passages between adjacent cells.
     """
 
     def __init__(self, grid: List[List[int]], entry: Optional[Cell],
@@ -74,10 +106,10 @@ class Maze:
         self.rows = len(grid)
         self.cols = len(grid[0]) if grid else 0
 
-    # -- 構築 --------------------------------------------------------------- #
+    # -- construction ------------------------------------------------------- #
     @classmethod
     def from_file(cls, path: str) -> "Maze":
-        """*path*を解析する。不正なグリッドの場合は :class:`MazeError` を送出する。"""
+        """Parse *path*. Raise :class:`MazeError` on a malformed grid."""
         grid: List[List[int]] = []
         footer: List[str] = []
         reading_grid = True
@@ -123,6 +155,7 @@ class Maze:
         except ValueError:
             return None
 
+    # -- grid access -------------------------------------------------------- #
     def __contains__(self, cell: Cell) -> bool:
         row, col = cell
         return 0 <= row < self.rows and 0 <= col < self.cols
@@ -136,14 +169,15 @@ class Maze:
         return self.grid[cell[0]][cell[1]]
 
     def is_fully_closed(self, cell: Cell) -> bool:
-        """必須の「42」パターンを描く、完全に閉じたセルならTrueを返す。"""
+        """True for the isolated cells that draw the mandatory "42" pattern."""
         return self.walls(cell) == ALL_WALLS
 
+    # -- graph -------------------------------------------------------------- #
     def neighbour(self, cell: Cell, side: Direction) -> Cell:
         return cell[0] + side.step[0], cell[1] + side.step[1]
 
     def is_open(self, cell: Cell, side: Direction) -> bool:
-        """*side*方向の共有壁が、両方の隣接セルで開いていればTrueを返す。"""
+        """True if the wall on *side* is open from both adjacent cells."""
         other = self.neighbour(cell, side)
         if other not in self:
             return False
@@ -151,13 +185,13 @@ class Maze:
             and not (self.walls(other) & side.opposite)
 
     def passages(self, cell: Cell) -> Iterator[Cell]:
-        """*cell*と開いた通路を共有する隣接セルを順に返す。"""
+        """Yield the neighbours *cell* shares an open passage with."""
         for side in Direction:
             if self.is_open(cell, side):
                 yield self.neighbour(cell, side)
 
     def region_of(self, start: Cell) -> FrozenSet[Cell]:
-        """*start*から到達できるセルを幅優先探索で求めて返す。"""
+        """Breadth-first set of cells reachable from *start*."""
         seen = {start}
         queue = deque([start])
         while queue:
@@ -168,7 +202,7 @@ class Maze:
         return frozenset(seen)
 
     def largest_region(self) -> FrozenSet[Cell]:
-        """一度の走査で求めた、最大の連結成分を返す。"""
+        """Largest connected component, found in a single linear sweep."""
         seen: Set[Cell] = set()
         best: FrozenSet[Cell] = frozenset()
         for cell in self:
@@ -181,7 +215,7 @@ class Maze:
         return best
 
     def incoherent_cells(self) -> Tuple[Cell, ...]:
-        """隣接セルと壁の表現が一致していないセルを返す。"""
+        """Cells whose wall encoding disagrees with a neighbour."""
         return tuple(
             cell
             for cell in self
@@ -194,12 +228,15 @@ class Maze:
         )
 
 
+# --------------------------------------------------------------------------- #
+# Analysis
+# --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class MazeReport:
-    """迷路のプレイ可能領域についての接続性の測定結果。
+    """Connectivity measurements over the playable region of a maze.
 
-    基本となる数値だけを保存し、比率や判定は必要になった時点で計算する。
-    そのため、レポートは迷路の状態を軽量に表す自己完結したスナップショットになる。
+    Raw counts are stored once; every ratio or verdict is derived lazily, so a
+    report is a cheap, self-describing snapshot of one maze.
     """
 
     maze: Maze
@@ -210,7 +247,7 @@ class MazeReport:
 
     @cached_property
     def open_passages(self) -> int:
-        """領域グラフの辺の数（各通路を1回だけ数える）。"""
+        """Edges of the region graph (each counted once)."""
         return sum(
             1
             for cell in self.region
@@ -220,7 +257,7 @@ class MazeReport:
 
     @cached_property
     def potential_passages(self) -> int:
-        """内部の壁をすべて開けた場合に領域が持つ辺の数。"""
+        """Edges the region would have with every interior wall opened."""
         return sum(
             ((r, c + 1) in self.region) + ((r + 1, c) in self.region)
             for r, c in self.region
@@ -228,7 +265,7 @@ class MazeReport:
 
     @property
     def loops(self) -> int:
-        """独立したループ数。1つの連結成分では ``辺 - 頂点 + 1`` で求める。"""
+        """Independent cycles: ``edges - nodes + 1`` for one component."""
         return self.open_passages - len(self.region) + 1
 
     @property
@@ -245,10 +282,10 @@ class MazeReport:
 
     @cached_property
     def disconnected_corridors(self) -> int:
-        """プレイ可能領域の外にある、"42"の壁ではないセルの数。
+        """Cells outside the playable region that are not "42" walls.
 
-        プレイヤーが決して到達できない通路にあたる。Pac-Man風のステージでは
-        アイテムを回収できず、クリアできないステージになってしまう。
+        These are corridors a player could never reach -- in a Pac-Man level
+        their pacgums would be uncollectable, so the level is unwinnable.
         """
         return sum(
             1
@@ -264,11 +301,11 @@ class MazeReport:
 
     @cached_property
     def dead_ends(self) -> Tuple[int, int]:
-        """通路が1つだけのセルの数を ``(通常, "42"に囲まれたもの)`` で返す。
+        """``(real, "42"-enclosed)`` counts of single-opening cells.
 
-        閉じた壁のうち通常セル側を1つ開けられるものを*通常の行き止まり*とする。
-        すべての閉じた壁が完全閉鎖された"42"セルまたは外周に面している場合は、
-        *囲まれた行き止まり*として許容する。
+        A dead-end is *real* when one closed wall could be opened toward a
+        normal cell; it is *enclosed* - and tolerated - when every closed wall
+        faces a fully closed "42" cell or the outer border.
         """
         real = enclosed = 0
         for cell in self.region:
@@ -290,11 +327,11 @@ class MazeReport:
 
     @cached_property
     def unreachable_key_cells(self) -> Tuple[Cell, ...]:
-        """Pac-Man用に通路である必要がある四隅と中央を確認する。
+        """Pac-Man needs the four corners and the centre as corridors.
 
-        行数・列数が奇数なら中央は1セルになる。偶数の場合は中央に
-        ぴったり該当するセルがないため、中央を囲む最大4セルのいずれかを
-        スタート地点として許可する。
+        With an odd row/column count the centre is a single cell; with an
+        even one there is no cell dead in the middle, so any of the (up to
+        four) cells surrounding the middle is accepted as the start.
         """
         rows, cols = self.maze.rows, self.maze.cols
         corners = {(0, 0), (0, cols - 1), (rows - 1, 0), (rows - 1, cols - 1)}
@@ -305,7 +342,7 @@ class MazeReport:
         return tuple(sorted(missing))
 
     def _centre_candidates(self) -> FrozenSet[Cell]:
-        """幅・高さが偶数の場合も考慮して、中央付近のセルを返す。"""
+        """The cell(s) around the middle, accounting for even dimensions."""
         rows, cols = self.maze.rows, self.maze.cols
         row_mid = {rows // 2} if rows % 2 else {rows // 2 - 1, rows // 2}
         col_mid = {cols // 2} if cols % 2 else {cols // 2 - 1, cols // 2}
@@ -313,7 +350,7 @@ class MazeReport:
 
 
 def analyze(maze: Maze) -> MazeReport:
-    """プレイ可能領域（入口からの領域、または最大領域）を選び、測定する。"""
+    """Pick the playable region (entry, or the largest one) and measure it."""
     if maze.entry is not None and maze.entry in maze:
         region, from_footer = maze.region_of(maze.entry), True
         entry = maze.entry
@@ -326,15 +363,19 @@ def analyze(maze: Maze) -> MazeReport:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Verdict & reporting
+# --------------------------------------------------------------------------- #
 def verdict(report: MazeReport, min_loops: int, max_dead_ends: int) -> str:
-    """*report*に対する結論を1行で返す。
+    """Return the one-line conclusion for *report*.
 
-        プレイ可能（非完全）判定は、調整可能で数値化された2つの基準で決まる。
+    Two adjustable, quantifiable thresholds drive the playable (non-perfect)
+    verdict:
 
-        * *min_loops* - Pac-Man用の盤面に必要な独立経路数（デフォルトは2。
-            完全迷路から壁を1つ開けただけのループ1つでは不十分）。
-        * *max_dead_ends* - 許容する通常の行き止まり数（デフォルトは2。0にすると
-            行き止まりのない、完全に編み込まれた盤面を要求する）。
+    * *min_loops* - independent routes a Pac-Man board must keep (default 2;
+      a single loop, i.e. a perfect maze with one wall removed, is not enough);
+    * *max_dead_ends* - real dead-ends tolerated (default 2; set 0 to require a
+      perfectly braided board, which is the no-dead-end bonus).
     """
     real_dead_ends = report.dead_ends[0]
     if report.incoherent:
@@ -389,7 +430,7 @@ def verdict(report: MazeReport, min_loops: int, max_dead_ends: int) -> str:
 
 
 def render(report: MazeReport, min_loops: int, max_dead_ends: int) -> str:
-    """人間が読みやすい完全なレポートを作成する。"""
+    """Build the full human-readable report."""
     maze = report.maze
     real, enclosed = report.dead_ends
     lines = [
@@ -416,7 +457,7 @@ def render(report: MazeReport, min_loops: int, max_dead_ends: int) -> str:
 
 
 def _xy(cell: Cell) -> str:
-    """内部の ``(行, 列)`` セルを課題の ``(x, y)`` 表記に変換する。"""
+    """Render an internal ``(row, col)`` cell as the subject's ``(x, y)``."""
     return f"({cell[1]}, {cell[0]})"
 
 
@@ -444,6 +485,9 @@ def _coherence(cells: Tuple[Cell, ...]) -> str:
     return f"{len(cells)} mismatching cell(s) -> {shown}{extra}"
 
 
+# --------------------------------------------------------------------------- #
+# Entry point
+# --------------------------------------------------------------------------- #
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Analyze an a_maze_ing output file: wall coherence and "
@@ -465,7 +509,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 
 def main(argv: List[str]) -> int:
-    """読み込み・分析・報告を行い、プロセスの終了コードを返す。"""
+    """Read, analyze and report; return the process exit code."""
     args = parse_args(argv)
     try:
         maze = Maze.from_file(args.output_file)
@@ -484,6 +528,6 @@ if __name__ == "__main__":
         sys.exit(main(sys.argv[1:]))
     except KeyboardInterrupt:
         sys.exit(130)
-    except Exception as error:        # 予期しない入力でも安全に終了する
+    except Exception as error:        # stay safe on any unexpected input
         print(f"Unexpected error while analyzing the maze: {error}")
         sys.exit(EXIT_MALFORMED)
